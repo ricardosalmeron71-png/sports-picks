@@ -1,0 +1,31 @@
+// Calendario + resultados recientes + momios ESPN. pg_cron cada 3 h.
+// Body opcional: { leagues?: string[], daysBack?: number, daysAhead?: number }
+// Para cargar historial (backfill): { "leagues": ["ufc"], "daysBack": 1500, "daysAhead": 0 }
+import { adminClient, isAuthorizedCron, json, loadLeagues, readBody, track } from "../_shared/db.ts";
+import { fetchFightCenter, fetchWindow } from "../_shared/espn.ts";
+import { ingestEvents } from "../_shared/ingest.ts";
+
+Deno.serve(async (req) => {
+  if (!isAuthorizedCron(req)) return json({ error: "unauthorized" }, 401);
+  const body = await readBody<{ leagues: string[]; daysBack: number; daysAhead: number }>(req);
+  const db = adminClient();
+  const leagues = (await loadLeagues(db, body.leagues)).filter((l) => l.espn_sport);
+  const daysBack = Math.min(body.daysBack ?? 2, 3650);
+  const daysAhead = Math.min(body.daysAhead ?? 45, 365);
+
+  const results = [];
+  for (const lg of leagues) {
+    results.push(await track(db, "sync-schedule", lg.id, async () => {
+      const events = await fetchWindow(lg, daysBack, daysAhead);
+      let fightDetails;
+      if (lg.espn_sport === "mma") {
+        // Detalle de carteleras recientes/próximas (segmentos, títulos, métodos)
+        fightDetails = new Map();
+        const near = events.filter((e) => Math.abs(Date.parse(e.starts_at) - Date.now()) < 21 * 86400_000);
+        for (const e of near) for (const [k, v] of await fetchFightCenter(e.external_id).catch(() => new Map())) fightDetails.set(k, v);
+      }
+      return await ingestEvents(db, lg, events, { withOdds: true, fightDetails });
+    }));
+  }
+  return json({ ok: true, results });
+});

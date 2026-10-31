@@ -1,0 +1,1 @@
+-- Datos de ejemplo locales (las ligas se cargan en la migración 20261031000005_leagues.sql)

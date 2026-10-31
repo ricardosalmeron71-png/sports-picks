@@ -1,0 +1,40 @@
+# Configuración local de Supabase CLI (supabase start)
+project_id = "sports-picks"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[realtime]
+enabled = true
+
+[auth]
+enabled = true
+site_url = "sportspicks://"
+additional_redirect_urls = ["sportspicks://auth-callback", "exp://localhost:8081"]
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+
+[functions.sync-schedule]
+verify_jwt = false
+[functions.sync-live]
+verify_jwt = false
+[functions.sync-teams]
+verify_jwt = false
+[functions.sync-odds]
+verify_jwt = false
+[functions.sync-boxing]
+verify_jwt = false
+[functions.send-push]
+verify_jwt = false
+[functions.athlete-profile]
+verify_jwt = true

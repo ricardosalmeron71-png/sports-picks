@@ -350,10 +350,13 @@ export async function fetchScoreboard(league: LeagueConf, dates?: string): Promi
  * Calendario en una ventana de días. Combate/carreras aceptan rangos; los deportes
  * de equipo se piden día por día (ESPN rechaza rangos largos en esas ligas).
  */
-export async function fetchWindow(league: LeagueConf, daysBack: number, daysAhead: number): Promise<NEvent[]> {
+export function fetchWindow(league: LeagueConf, daysBack: number, daysAhead: number): Promise<NEvent[]> {
   const now = Date.now();
-  const from = new Date(now - daysBack * 86400_000);
-  const to = new Date(now + daysAhead * 86400_000);
+  return fetchRange(league, new Date(now - daysBack * 86400_000), new Date(now + daysAhead * 86400_000));
+}
+
+/** Eventos entre dos fechas (para cargar historial por bloques). */
+export async function fetchRange(league: LeagueConf, from: Date, to: Date): Promise<NEvent[]> {
   if (league.kind !== "team") {
     try {
       const evs = await fetchScoreboard(league, `${espnDate(from)}-${espnDate(to)}`);

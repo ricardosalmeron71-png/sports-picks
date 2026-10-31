@@ -1,13 +1,14 @@
 // Calendario + resultados recientes + momios ESPN. pg_cron cada 3 h.
 // Body opcional: { leagues?: string[], daysBack?: number, daysAhead?: number }
-// Para cargar historial (backfill): { "leagues": ["ufc"], "daysBack": 1500, "daysAhead": 0 }
+//            o un rango fijo: { leagues?: string[], from: "2025-10-01", to: "2025-10-31" }
+// Para cargar historial (backfill): { "leagues": ["ufc"], "daysBack": 1100, "daysAhead": 0 }
 import { adminClient, isAuthorizedCron, json, loadLeagues, readBody, track } from "../_shared/db.ts";
-import { fetchFightCenter, fetchWindow } from "../_shared/espn.ts";
+import { fetchFightCenter, fetchRange, fetchWindow } from "../_shared/espn.ts";
 import { ingestEvents } from "../_shared/ingest.ts";
 
 Deno.serve(async (req) => {
   if (!isAuthorizedCron(req)) return json({ error: "unauthorized" }, 401);
-  const body = await readBody<{ leagues: string[]; daysBack: number; daysAhead: number }>(req);
+  const body = await readBody<{ leagues: string[]; daysBack: number; daysAhead: number; from: string; to: string }>(req);
   const db = adminClient();
   const leagues = (await loadLeagues(db, body.leagues)).filter((l) => l.espn_sport);
   const daysBack = Math.min(body.daysBack ?? 2, 3650);
@@ -16,7 +17,10 @@ Deno.serve(async (req) => {
   const results = [];
   for (const lg of leagues) {
     results.push(await track(db, "sync-schedule", lg.id, async () => {
-      const events = await fetchWindow(lg, daysBack, daysAhead);
+      const ranged = body.from && body.to && /^\d{4}-\d{2}-\d{2}$/.test(body.from) && /^\d{4}-\d{2}-\d{2}$/.test(body.to);
+      const events = ranged
+        ? await fetchRange(lg, new Date(`${body.from}T12:00:00Z`), new Date(`${body.to}T12:00:00Z`))
+        : await fetchWindow(lg, daysBack, daysAhead);
       let fightDetails;
       if (lg.espn_sport === "mma") {
         // Detalle de carteleras recientes/próximas (segmentos, títulos, métodos)

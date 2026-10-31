@@ -38,7 +38,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "bundler": "metro"
+      "bundler": "metro",
+      "name": "Sports Picks",
+      "shortName": "Picks",
+      "themeColor": "#0B0F1A",
+      "backgroundColor": "#0B0F1A"
     },
     "plugins": [
       "expo-router",
@@ -55,7 +59,8 @@
       ]
     ],
     "experiments": {
-      "typedRoutes": false
+      "typedRoutes": false,
+      "baseUrl": "/sports-picks"
     },
     "extra": {
       "eas": {

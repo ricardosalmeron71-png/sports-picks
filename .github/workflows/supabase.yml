@@ -1,0 +1,141 @@
+# Backend en Supabase, todo desde GitHub (sin computadora).
+#
+# Secrets necesarios (Settings → Secrets and variables → Actions → New repository secret):
+#   SUPABASE_ACCESS_TOKEN  → https://supabase.com/dashboard/account/tokens
+#   CRON_SECRET            → el texto largo de vault (cron_secret)
+#   SUPABASE_DB_PASSWORD   → (solo para "aplicar-migraciones") la contraseña de la base de datos
+#   ODDS_API_KEY           → (opcional) The Odds API
+#   THESPORTSDB_KEY        → (opcional) TheSportsDB
+name: Supabase
+
+on:
+  push:
+    branches: [claude/eloquent-davinci-f7oifm, main]
+    paths: ["supabase/functions/**", ".github/workflows/supabase.yml"]
+  workflow_dispatch:
+    inputs:
+      accion:
+        description: "¿Qué hacer?"
+        type: choice
+        default: desplegar-funciones
+        options:
+          - desplegar-funciones
+          - carga-inicial
+          - cargar-historial
+          - aplicar-migraciones
+          - probar
+
+env:
+  PROJECT_ID: likyehpzkinuouvgkbui
+  SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+  CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+concurrency:
+  group: supabase-${{ github.event.inputs.accion || 'deploy' }}
+  cancel-in-progress: false
+
+jobs:
+  desplegar-funciones:
+    if: github.event_name == 'push' || github.event.inputs.accion == 'desplegar-funciones'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Revisar secrets
+        run: |
+          test -n "$SUPABASE_ACCESS_TOKEN" || { echo "::error::Falta el secret SUPABASE_ACCESS_TOKEN"; exit 1; }
+          test -n "$CRON_SECRET" || { echo "::error::Falta el secret CRON_SECRET"; exit 1; }
+      - name: Guardar secretos de las funciones
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          THESPORTSDB_KEY: ${{ secrets.THESPORTSDB_KEY }}
+        run: |
+          args="CRON_SECRET=$CRON_SECRET"
+          [ -n "$ODDS_API_KEY" ] && args="$args ODDS_API_KEY=$ODDS_API_KEY"
+          [ -n "$THESPORTSDB_KEY" ] && args="$args THESPORTSDB_KEY=$THESPORTSDB_KEY"
+          supabase secrets set --project-ref "$PROJECT_ID" $args
+      - name: Desplegar Edge Functions
+        run: supabase functions deploy --project-ref "$PROJECT_ID" --use-api
+
+  carga-inicial:
+    if: github.event.inputs.accion == 'carga-inicial'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Equipos, rosters con fotos y clasificaciones
+        run: |
+          call() {
+            echo "▶ $1 $2"
+            curl -sS --max-time 170 -X POST "https://$PROJECT_ID.supabase.co/functions/v1/$1" \
+              -H "x-cron-secret: $CRON_SECRET" -H "Content-Type: application/json" -d "$2" || echo "(tiempo agotado, sigue en el servidor)"
+            echo
+          }
+          for lg in nfl nba mlb ufc f1; do call sync-teams "{\"leagues\":[\"$lg\"]}"; done
+      - name: Calendario (2 días atrás, 45 adelante) y box
+        run: |
+          for lg in nfl nba mlb ufc f1; do
+            curl -sS --max-time 170 -X POST "https://$PROJECT_ID.supabase.co/functions/v1/sync-schedule" \
+              -H "x-cron-secret: $CRON_SECRET" -H "Content-Type: application/json" \
+              -d "{\"leagues\":[\"$lg\"],\"daysBack\":2,\"daysAhead\":45}" || true; echo
+          done
+          curl -sS --max-time 170 -X POST "https://$PROJECT_ID.supabase.co/functions/v1/sync-boxing" -H "x-cron-secret: $CRON_SECRET" || true; echo
+          curl -sS --max-time 170 -X POST "https://$PROJECT_ID.supabase.co/functions/v1/sync-odds" -H "x-cron-secret: $CRON_SECRET" || true; echo
+
+  cargar-historial:
+    if: github.event.inputs.accion == 'cargar-historial'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: UFC y F1 (3 años, para historial de peleas y carreras)
+        run: |
+          for lg in ufc f1; do
+            curl -sS --max-time 170 -X POST "https://$PROJECT_ID.supabase.co/functions/v1/sync-schedule" \
+              -H "x-cron-secret: $CRON_SECRET" -H "Content-Type: application/json" \
+              -d "{\"leagues\":[\"$lg\"],\"daysBack\":1100,\"daysAhead\":0}" || true; echo
+          done
+      - name: NFL, NBA y MLB (último año, por bloques de 2 semanas)
+        run: |
+          for lg in nfl nba mlb; do
+            for i in $(seq 26 -1 1); do
+              from=$(date -u -d "-$((i*14)) days" +%F); to=$(date -u -d "-$(((i-1)*14+1)) days" +%F)
+              echo "▶ $lg $from → $to"
+              curl -sS --max-time 170 -X POST "https://$PROJECT_ID.supabase.co/functions/v1/sync-schedule" \
+                -H "x-cron-secret: $CRON_SECRET" -H "Content-Type: application/json" \
+                -d "{\"leagues\":[\"$lg\"],\"from\":\"$from\",\"to\":\"$to\"}" || true; echo
+            done
+          done
+
+  aplicar-migraciones:
+    if: github.event.inputs.accion == 'aplicar-migraciones'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Vincular proyecto
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase link --project-ref "$PROJECT_ID" -p "$SUPABASE_DB_PASSWORD"
+      - name: Marcar como aplicadas las migraciones que se corrieron a mano (1 a 6)
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          supabase migration repair --status applied \
+            20261031000001 20261031000002 20261031000003 20261031000004 20261031000005 20261031000006 \
+            -p "$SUPABASE_DB_PASSWORD" || true
+      - name: Aplicar migraciones nuevas
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase db push -p "$SUPABASE_DB_PASSWORD"
+
+  probar:
+    if: github.event.inputs.accion == 'probar'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Llamar sync-live y send-push
+        run: |
+          for f in sync-live send-push; do
+            echo "▶ $f"; curl -sS --max-time 120 -X POST "https://$PROJECT_ID.supabase.co/functions/v1/$f" -H "x-cron-secret: $CRON_SECRET"; echo
+          done

@@ -119,7 +119,50 @@ Las migraciones se aplicaron en PostgreSQL 16 y se corrió un escenario completo
 
 ---
 
-## 4. Puesta en marcha
+## 4. Todo desde GitHub (sin computadora) — uso personal
+
+La app es para uso personal (tú y tus amigos), sin tiendas. Todo se despliega con **GitHub Actions**:
+
+| Workflow | Qué hace | Cuándo corre |
+|---|---|---|
+| **Supabase** | Sube las Edge Functions y sus secretos; carga inicial; historial; migraciones | Solo al hacer push en `supabase/functions` o a mano |
+| **Web (GitHub Pages)** | Publica la app web en `https://ricardosalmeron71-png.github.io/sports-picks/` | Al hacer push en `mobile/` |
+| **Android APK** | Compila el APK en la nube de Expo | A mano |
+
+### Paso 1 · Secrets del repositorio
+GitHub → **Settings → Secrets and variables → Actions → New repository secret**:
+
+| Nombre | De dónde sale |
+|---|---|
+| `SUPABASE_ACCESS_TOKEN` | supabase.com → avatar → **Account → Access Tokens → Generate new token** |
+| `CRON_SECRET` | SQL Editor: `select decrypted_secret from vault.decrypted_secrets where name = 'cron_secret';` |
+| `SUPABASE_DB_PASSWORD` | La contraseña que pusiste al crear el proyecto (solo para "aplicar-migraciones") |
+| `EXPO_TOKEN` | expo.dev → **Account settings → Access tokens** (solo para el APK) |
+| `ODDS_API_KEY` | (opcional) the-odds-api.com |
+| `THESPORTSDB_KEY` | (opcional) thesportsdb.com |
+
+### Paso 2 · Activar GitHub Pages
+**Settings → Pages → Build and deployment → Source: GitHub Actions**.
+
+### Paso 3 · Correr los workflows (pestaña **Actions** → elegir workflow → **Run workflow**)
+1. **Supabase** → `desplegar-funciones`
+2. **Supabase** → `aplicar-migraciones` (marca las 6 que corriste a mano y aplica la 7: momios 2 veces al día para no gastar la cuota gratis)
+3. **Supabase** → `carga-inicial` (equipos, fotos, clasificaciones, calendario, box, momios)
+4. **Supabase** → `cargar-historial` (UFC/F1 3 años; NFL/NBA/MLB último año → forma reciente, H2H, historial de peleas). Tarda ~20–40 min.
+5. **Web (GitHub Pages)** → Run workflow
+6. **Android APK** → Run workflow → descargar el APK desde expo.dev → Builds
+
+Revisar que todo jale: SQL Editor → `select job, league_id, ok, items, error from sync_runs order by id desc limit 30;`
+
+### Cómo la instalan tus amigos
+- **Android**: abren el link del APK en el celular e instalan (permitir "orígenes desconocidos").
+- **iPhone**: abren `https://ricardosalmeron71-png.github.io/sports-picks/` en **Safari** → Compartir → **Agregar a pantalla de inicio**.
+
+> Notificaciones: en Android requieren un proyecto de Firebase (gratis) cargado en expo.dev → Credentials. En iPhone (web) se están agregando notificaciones web push (iOS 16.4+).
+
+---
+
+## 5. Puesta en marcha manual (alternativa con computadora)
 
 ### 4.1 Base de datos y backend
 
@@ -229,7 +272,7 @@ npx eas-cli@latest submit --platform all
 
 ---
 
-## 5. Estructura
+## 6. Estructura
 
 ```
 supabase/
@@ -257,7 +300,7 @@ mobile/                  Expo SDK 58 + Expo Router + React Query + gifted-charts
   src/lib/time.ts        horarios en UTC-7 (configurable por usuario)
 ```
 
-## 6. Verificación
+## 7. Verificación
 
 ```bash
 cd mobile && npx tsc --noEmit

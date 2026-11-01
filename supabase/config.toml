@@ -36,5 +36,7 @@ verify_jwt = false
 verify_jwt = false
 [functions.send-push]
 verify_jwt = false
+[functions.vapid-key]
+verify_jwt = false
 [functions.athlete-profile]
 verify_jwt = true

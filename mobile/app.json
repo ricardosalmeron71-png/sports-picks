@@ -42,7 +42,8 @@
       "name": "Sports Picks",
       "shortName": "Picks",
       "themeColor": "#0B0F1A",
-      "backgroundColor": "#0B0F1A"
+      "backgroundColor": "#0B0F1A",
+      "output": "single"
     },
     "plugins": [
       "expo-router",
@@ -61,6 +62,11 @@
     "experiments": {
       "typedRoutes": false,
       "baseUrl": "/sports-picks"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "16e3f54e-147a-48ab-9841-839fb5107afb"
+      }
     }
   }
 }

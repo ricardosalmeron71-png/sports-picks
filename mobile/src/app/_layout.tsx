@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Redirect, router, Stack, useGlobalSearchParams, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import { Text, View } from "react-native";
+import { Platform, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useProfile } from "@/lib/api";
 import { AuthProvider, useAuth } from "@/lib/auth";
@@ -12,6 +12,7 @@ import { useGlobalLiveSync, useNotificationsRealtime } from "@/lib/realtime";
 import { isConfigured } from "@/lib/supabase";
 import { colors } from "@/lib/theme";
 import { setUtcOffset } from "@/lib/time";
+import { refreshWebPush } from "@/lib/webpush";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 2, refetchOnWindowFocus: true } },
@@ -43,7 +44,9 @@ function Gate() {
   useNotificationRouting();
 
   useEffect(() => {
-    if (userId) registerForPush(userId).catch((e) => console.warn("push", e));
+    if (!userId) return;
+    if (Platform.OS === "web") refreshWebPush(userId).catch(() => {});
+    else registerForPush(userId).then((r) => !r.ok && console.log("push:", r.message)).catch((e) => console.warn("push", e));
   }, [userId]);
 
   useEffect(() => {

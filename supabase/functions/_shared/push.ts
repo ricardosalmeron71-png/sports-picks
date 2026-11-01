@@ -1,11 +1,14 @@
 // Envío de notificaciones push vía Expo Push Service (APNs + FCM con un solo API).
 import { chunk, type DB } from "./db.ts";
+import { getVapid, type Vapid } from "./vapid.ts";
+import { parseSubscription, sendWebPush } from "./webpush.ts";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
 interface Claimed { id: number; user_id: string; title: string; body: string; data: Record<string, unknown>; kind: string }
 
 const CHANNEL: Record<string, string> = {
+  test: "results",
   game_start: "live",
   lead_change: "live",
   final: "results",
@@ -32,8 +35,10 @@ export async function flushPushQueue(db: DB, maxBatches = 5): Promise<{ sent: nu
       badges.set(u, Number(data ?? 0));
     }));
 
+    // Expo (APNs/FCM nativo) y Web Push (iPhone/web instalada) usan tokens distintos
+    const isWeb = (t: string) => t.startsWith("{");
     const messages = items.flatMap((n) =>
-      (byUser.get(n.user_id) ?? []).map((to) => ({
+      (byUser.get(n.user_id) ?? []).filter((t) => !isWeb(t)).map((to) => ({
         to,
         title: n.title,
         body: n.body,
@@ -48,6 +53,37 @@ export async function flushPushQueue(db: DB, maxBatches = 5): Promise<{ sent: nu
 
     const retry: number[] = [];
     const badTokens: string[] = [];
+
+    // ---- Web Push ----
+    const webJobs = items.flatMap((n) => (byUser.get(n.user_id) ?? []).filter(isWeb).map((token) => ({ n, token })));
+    if (webJobs.length) {
+      let vapid: Vapid | null = null;
+      try {
+        vapid = await getVapid(db);
+      } catch (e) {
+        console.error("vapid", e);
+      }
+      if (vapid) {
+        const queue = [...webJobs];
+        await Promise.all(Array.from({ length: Math.min(15, queue.length) }, async () => {
+          while (queue.length) {
+            const { n, token } = queue.shift()!;
+            const sub = parseSubscription(token);
+            if (!sub) {
+              badTokens.push(token);
+              continue;
+            }
+            const r = await sendWebPush(sub, { title: n.title, body: n.body, tag: `${n.kind}-${n.id}`, data: { ...n.data, notificationId: n.id } }, vapid!);
+            if (r.ok) sent++;
+            else {
+              failed++;
+              if (r.gone) badTokens.push(token);
+              else console.error("webpush", r.status, r.error);
+            }
+          }
+        }));
+      }
+    }
     for (const part of chunk(messages, 100)) {
       try {
         const res = await fetch(EXPO_PUSH_URL, {

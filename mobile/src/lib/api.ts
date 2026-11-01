@@ -485,6 +485,17 @@ export function useToggleFavorite(userId?: string) {
   });
 }
 
+export function useMyPushTokens(userId?: string) {
+  return useQuery({
+    queryKey: ["push_tokens", userId],
+    enabled: !!userId,
+    queryFn: async () =>
+      unwrap<{ token: string; platform: string | null; device_name: string | null; updated_at: string }[]>(
+        await supabase.from("push_tokens").select("token, platform, device_name, updated_at").eq("user_id", userId!),
+      ),
+  });
+}
+
 export function useNotifications(userId?: string) {
   return useQuery({
     queryKey: ["notifications", userId],

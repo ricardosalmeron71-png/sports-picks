@@ -162,7 +162,14 @@ Revisar que todo jale: SQL Editor → `select job, league_id, ok, items, error f
 - **Android**: abren el link del APK en el celular e instalan (permitir "orígenes desconocidos").
 - **iPhone**: abren `https://ricardosalmeron71-png.github.io/sports-picks/` en **Safari** → Compartir → **Agregar a pantalla de inicio**.
 
-> Notificaciones: en Android requieren un proyecto de Firebase (gratis) cargado en expo.dev → Credentials. En iPhone (web) se están agregando notificaciones web push (iOS 16.4+).
+### Notificaciones push
+
+| Dispositivo | Cómo funcionan | Qué se necesita |
+|---|---|---|
+| **iPhone** (web instalada) | Web Push (iOS 16.4+) | Instalar la app desde Safari («Agregar a pantalla de inicio»), abrirla desde su ícono y en **Perfil → Notificaciones → Activar**. Las llaves del servidor (VAPID) se generan solas en la base de datos. |
+| **Android** (APK) | Expo Push → Firebase (FCM) | 1) Proyecto gratis en Firebase con la app `com.sportspicks.app`; 2) subir `google-services.json` a `mobile/`; 3) subir la llave de cuenta de servicio (FCM V1) en expo.dev → Credentials; 4) recompilar el APK. |
+
+Después de activar, **Perfil → Enviar notificación de prueba** confirma que todo llega. El servidor las manda al instante (trigger de la base de datos) y cada minuto como respaldo.
 
 ---
 

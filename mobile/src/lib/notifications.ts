@@ -35,30 +35,40 @@ async function ensureChannels() {
   });
 }
 
+export type PushResult = { ok: boolean; message: string };
+
 /** Pide permiso, obtiene el ExponentPushToken y lo guarda en push_tokens. */
-export async function registerForPush(userId: string): Promise<string | null> {
-  if (Platform.OS === "web") return null;
+export async function registerForPush(userId: string): Promise<PushResult> {
+  if (Platform.OS === "web") return { ok: false, message: "En la web se usa webpush.ts" };
   await ensureChannels();
-  if (!Device.isDevice) {
-    console.log("Las notificaciones push requieren un dispositivo físico");
-    return null;
-  }
+  if (!Device.isDevice) return { ok: false, message: "Las notificaciones push solo funcionan en un celular físico." };
   const current = await Notifications.getPermissionsAsync();
   let status = current.status;
   if (status !== "granted") status = (await Notifications.requestPermissionsAsync()).status;
-  if (status !== "granted") return null;
+  if (status !== "granted") return { ok: false, message: "Permiso denegado. Actívalo en Ajustes del teléfono → Apps → Sports Picks → Notificaciones." };
 
   const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
-  if (!projectId || String(projectId).startsWith("REEMPLAZA")) {
-    console.warn("Configura extra.eas.projectId en app.json (npx eas-cli init)");
-    return null;
+  if (!projectId) return { ok: false, message: "Falta el projectId de Expo en la configuración de la app." };
+  try {
+    const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+    const { error } = await supabase.from("push_tokens").upsert(
+      { token, user_id: userId, platform: Platform.OS, device_name: Device.deviceName ?? null, updated_at: new Date().toISOString() },
+      { onConflict: "token" },
+    );
+    if (error) return { ok: false, message: `No se pudo guardar el token: ${error.message}` };
+    return { ok: true, message: "¡Notificaciones activadas en este dispositivo!" };
+  } catch (e) {
+    const msg = (e as Error).message ?? String(e);
+    if (/firebase|fcm|google-services/i.test(msg)) {
+      return { ok: false, message: "Esta versión de la app se compiló sin Firebase. Falta google-services.json y volver a compilar el APK." };
+    }
+    return { ok: false, message: `No se pudo obtener el token: ${msg}` };
   }
-  const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-  await supabase.from("push_tokens").upsert(
-    { token, user_id: userId, platform: Platform.OS, device_name: Device.deviceName ?? null, updated_at: new Date().toISOString() },
-    { onConflict: "token" },
-  );
-  return token;
+}
+
+export async function getNativePushGranted(): Promise<boolean> {
+  if (Platform.OS === "web") return false;
+  return (await Notifications.getPermissionsAsync()).status === "granted";
 }
 
 export async function unregisterPush() {

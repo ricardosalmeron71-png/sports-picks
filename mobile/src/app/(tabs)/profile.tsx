@@ -1,11 +1,12 @@
 // Perfil: mis estadísticas de picks, zona horaria y preferencias de notificaciones
 import { router } from "expo-router";
-import { Alert, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Bars } from "@/components/Charts";
 import { Avatar, Button, Card, Chip, H1, KPI, SectionTitle } from "@/components/ui";
 import { useMyStats, useProfile, useUpdateProfile } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { showAlert } from "@/lib/dialog";
 import { unregisterPush } from "@/lib/notifications";
 import { supabase } from "@/lib/supabase";
 import { colors, leagueColor } from "@/lib/theme";
@@ -32,7 +33,7 @@ export default function ProfileTab() {
   const totals = (stats.data ?? []).reduce((acc, r) => ({ w: acc.w + Number(r.wins), l: acc.l + Number(r.losses), pts: acc.pts + Number(r.points) }), { w: 0, l: 0, pts: 0 });
   const pct = totals.w + totals.l ? Math.round((100 * totals.w) / (totals.w + totals.l)) : 0;
 
-  const set = (patch: Partial<Profile>) => update.mutate(patch, { onError: (e) => Alert.alert("Error", e.message) });
+  const set = (patch: Partial<Profile>) => update.mutate(patch, { onError: (e) => showAlert("Error", e.message) });
 
   return (
     <SafeAreaView edges={["top"]} style={{ flex: 1, backgroundColor: colors.bg }}>

@@ -106,3 +106,11 @@ export const fmtPts = (n: number | string | null | undefined) => {
   const v = Number(n ?? 0);
   return String(Math.round(v * 100) / 100);
 };
+
+/** Inicio y fin (ISO) de un día local (UTC-7 por defecto); dayOffset 0 = hoy */
+export function localDayBounds(dayOffset = 0) {
+  const nowLocal = new Date(Date.now() + OFFSET_MIN * 60_000);
+  const startLocal = Date.UTC(nowLocal.getUTCFullYear(), nowLocal.getUTCMonth(), nowLocal.getUTCDate()) + dayOffset * 86400_000;
+  const from = startLocal - OFFSET_MIN * 60_000;
+  return { from: new Date(from).toISOString(), to: new Date(from + 86400_000 - 1).toISOString() };
+}

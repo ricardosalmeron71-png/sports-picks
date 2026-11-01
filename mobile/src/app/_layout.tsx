@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Redirect, Stack, useSegments } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Redirect, router, Stack, useGlobalSearchParams, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { Text, View } from "react-native";
@@ -19,7 +20,23 @@ const queryClient = new QueryClient({
 function Gate() {
   const { session, userId, loading } = useAuth();
   const segments = useSegments();
+  const params = useGlobalSearchParams<{ code?: string }>();
   const profile = useProfile(userId);
+
+  // Link de invitación abierto sin sesión: se guarda el código y se usa al entrar
+  const seg = segments as string[];
+  const isJoinLink = seg[0] === "group" && seg[1] === "join" && !!params.code;
+  useEffect(() => {
+    if (!loading && !session && isJoinLink) AsyncStorage.setItem("pendingInviteCode", String(params.code).toUpperCase()).catch(() => {});
+  }, [loading, session, isJoinLink, params.code]);
+  useEffect(() => {
+    if (!userId) return;
+    AsyncStorage.getItem("pendingInviteCode").then((code) => {
+      if (!code) return;
+      AsyncStorage.removeItem("pendingInviteCode").catch(() => {});
+      router.push(`/group/join?code=${code}`);
+    }).catch(() => {});
+  }, [userId]);
 
   useGlobalLiveSync(!!session);
   useNotificationsRealtime(userId);

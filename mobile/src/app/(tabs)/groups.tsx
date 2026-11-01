@@ -1,6 +1,7 @@
 // Mis grupos de picks
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback } from "react";
 import { FlatList, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Avatar, Button, Card, Empty, H1, Loading } from "@/components/ui";
@@ -11,6 +12,8 @@ import { colors, leagueEmoji } from "@/lib/theme";
 export default function Groups() {
   const { userId } = useAuth();
   const { data, isLoading, refetch, isRefetching } = useMyGroups(userId);
+  // Al volver a esta pestaña (por ejemplo después de crear o unirte a un grupo) siempre se actualiza
+  useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
   return (
     <SafeAreaView edges={["top"]} style={{ flex: 1, backgroundColor: colors.bg }}>
       <FlatList

@@ -1,15 +1,17 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { Alert, ScrollView, Text, TextInput, View } from "react-native";
+import { ScrollView, Text, TextInput, View } from "react-native";
 import { Button, Chip, LeaguePill } from "@/components/ui";
-import { createGroup, useLeagues } from "@/lib/api";
+import { useCreateGroup, useLeagues } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { showAlert } from "@/lib/dialog";
 import { colors } from "@/lib/theme";
 import type { LeagueId } from "@/lib/types";
 
 export default function NewGroup() {
   const { userId } = useAuth();
   const leagues = useLeagues();
+  const create = useCreateGroup();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selected, setSelected] = useState<LeagueId[]>([]);
@@ -19,16 +21,16 @@ export default function NewGroup() {
   const toggle = (id: LeagueId) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   const submit = async () => {
-    if (name.trim().length < 2) return Alert.alert("Nombre muy corto");
+    if (name.trim().length < 2) return showAlert("Nombre muy corto", "Escribe al menos 2 letras.");
     setBusy(true);
     try {
-      const g = await createGroup({
+      const g = await create.mutateAsync({
         name: name.trim(), description, leagues: selected, ownerId: userId!,
         scoring: mode === "units" ? { mode: "units" } : { mode: "points", winner: 1, spread: 1, total: 1, method: 3, podium: 2, underdog_bonus: true },
       });
       router.replace(`/group/${g.id}`);
     } catch (e) {
-      Alert.alert("Error", (e as Error).message);
+      showAlert("No se pudo crear el grupo", (e as Error).message);
     } finally {
       setBusy(false);
     }

@@ -1,11 +1,12 @@
 // Grupo: tabla de posiciones, gráfico de carrera, picks en vivo y chat
 import { Ionicons } from "@expo/vector-icons";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
-import { FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
+import { FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Bars, TrendChart } from "@/components/Charts";
 import { PickRow } from "@/components/PickCards";
-import { Avatar, Card, Chip, Empty, Gradient, KPI, Loading, SectionTitle } from "@/components/ui";
+import { InviteCard } from "@/components/InviteCard";
+import { Avatar, Button, Card, Chip, Empty, Gradient, KPI, Loading, SectionTitle } from "@/components/ui";
 import { useGroup, useGroupMessages, useGroupPicks, useLeaderboard, useTimeline } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useGroupRealtime } from "@/lib/realtime";
@@ -24,11 +25,6 @@ export default function GroupScreen() {
   if (group.isLoading || !group.data) return <Loading />;
   const g = group.data;
 
-  const share = () =>
-    Share.share({
-      message: `¡Únete a mi grupo "${g.name}" en Sports Picks! 🏆\nCódigo: ${g.invite_code}\nsportspicks://group/join?code=${g.invite_code}`,
-    });
-
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <Stack.Screen options={{ title: g.name }} />
@@ -40,12 +36,11 @@ export default function GroupScreen() {
             {g.leagues?.length ? g.leagues.map((l) => leagueEmoji[l]).join(" ") : "Todas las ligas"} · {g.scoring?.mode === "units" ? "Unidades" : "Puntos"}
           </Text>
         </View>
-        <Pressable onPress={share} style={st.code}>
-          <Text style={{ color: colors.textDim, fontSize: 10, fontWeight: "800" }}>INVITAR</Text>
-          <Text style={{ color: colors.text, fontWeight: "900", letterSpacing: 2 }}>{g.invite_code}</Text>
-          <Ionicons name="share-social" size={16} color={colors.primary} />
-        </Pressable>
       </Gradient>
+      <InviteCard name={g.name} code={g.invite_code} />
+      <View style={{ paddingHorizontal: 16, paddingTop: 10 }}>
+        <Button title="🎯 Hacer mis picks" onPress={() => router.push(`/picks?groupId=${g.id}`)} />
+      </View>
       <View style={{ flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingVertical: 10 }}>
         <Chip label="🏆 Tabla" active={tab === "table"} onPress={() => setTab("table")} />
         <Chip label="🎯 Picks" active={tab === "picks"} onPress={() => setTab("picks")} />

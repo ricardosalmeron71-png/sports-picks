@@ -2,15 +2,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { type ComponentRef, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Donut, TrendChart } from "@/components/Charts";
 import { competitorImage, competitorName, mainCompetition } from "@/components/EventCard";
 import { FightStats } from "@/components/FightStats";
-import { Avatar, Card, Chip, Dim, Empty, FormDots, LiveBadge, Loading, SectionTitle, StatusPill, TeamLogo } from "@/components/ui";
+import { Avatar, Button, Card, Chip, Dim, Empty, FormDots, LiveBadge, Loading, SectionTitle, StatusPill, TeamLogo } from "@/components/ui";
 import {
-  useConsensus, useDeletePick, useEvent, useHeadToHead, useMyGroups, useOddsHistory, usePicksForEvent, useSavePick, useTeamForm,
+  useConsensus, useEvent, useHeadToHead, useMyGroups, useOddsHistory, usePicksForEvent, useSavePicks, useTeamForm,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { confirmAsync, showAlert } from "@/lib/dialog";
 import { bookName, fmtLine, fmtOdds, noVig, pct } from "@/lib/odds";
 import { colors, hex, leagueColor, leagueEmoji, series } from "@/lib/theme";
 import { countdown, fmtDateLong, fmtTime, offsetLabel, statusEs } from "@/lib/time";
@@ -394,8 +395,7 @@ function PicksSection({ event, comp }: { event: SportEvent; comp: Competition })
 
   const picks = usePicksForEvent(event.id, [comp.id]);
   const consensus = useConsensus(comp.id, groupId);
-  const save = useSavePick();
-  const del = useDeletePick();
+  const save = useSavePicks();
   const locked = comp.status !== "scheduled" || Date.parse(comp.starts_at) <= Date.now();
   const kind = event.leagues?.kind ?? "team";
   const cs = comp.competitors ?? [];
@@ -404,14 +404,34 @@ function PicksSection({ event, comp }: { event: SportEvent; comp: Competition })
   const mine = groupPicks.filter((p) => p.user_id === userId);
   const myPick = (t: PickType) => mine.find((p) => p.pick_type === t);
 
+  // Borrador local: se puede cambiar libremente hasta presionar "Guardar". Lo ya guardado es definitivo.
+  type Draft = { selection_competitor_id?: string | null; selection_value?: string | null; line?: number | null; odds_price?: number | null };
+  const [drafts, setDrafts] = useState<Partial<Record<PickType, Draft>>>({});
+  useEffect(() => setDrafts({}), [groupId, comp.id]);
+  const cur = (t: PickType): Draft | undefined => myPick(t) ?? drafts[t];
+  const isSaved = (t: PickType) => !!myPick(t);
+  const draftCount = Object.keys(drafts).filter((t) => !myPick(t as PickType)).length;
+
   const bestOdds = (market: Odds["market"], pred: (o: Odds) => boolean) =>
     odds.filter((o) => o.market === market && pred(o)).sort((x, y) => y.price - x.price)[0];
 
-  const place = (pick_type: PickType, extra: { selection_competitor_id?: string; selection_value?: string; line?: number | null; odds_price?: number | null }) => {
-    if (!groupId) return Alert.alert("Sin grupo", "Crea o únete a un grupo para hacer picks.");
-    save.mutate({ group_id: groupId, competition_id: comp.id, pick_type, ...extra }, {
-      onError: (e) => Alert.alert("No se pudo guardar", e.message),
-    });
+  const place = (pick_type: PickType, extra: Draft) => {
+    if (isSaved(pick_type)) return showAlert("Pick guardado 🔒", "Los picks guardados ya no se pueden cambiar.");
+    setDrafts((d) => ({ ...d, [pick_type]: extra }));
+  };
+
+  const saveDrafts = async () => {
+    if (!groupId) return showAlert("Sin grupo", "Crea o únete a un grupo para hacer picks.");
+    const groupName = eligible.find((g) => g.id === groupId)?.name ?? "tu grupo";
+    const ok = await confirmAsync("¿Guardar tu pick?", `Se guardará en "${groupName}". Una vez guardado NO podrás cambiarlo.`, "Guardar 🔒");
+    if (!ok) return;
+    const rows = (Object.entries(drafts) as [PickType, Draft][])
+      .filter(([t]) => !myPick(t))
+      .map(([pick_type, d]) => ({ group_id: groupId, competition_id: comp.id, pick_type, ...d }));
+    const res = await save.mutateAsync(rows).catch((e: Error) => ({ ok: 0, failed: [{ competition_id: comp.id, message: e.message }] }));
+    if (res.failed.length) showAlert("No se pudo guardar", res.failed.map((f) => f.message).join("\n"));
+    else showAlert("¡Pick guardado! 🔒", "Ya quedó registrado y no se puede cambiar.");
+    setDrafts({});
   };
 
   if (!groups.isLoading && !eligible.length) {
@@ -447,9 +467,9 @@ function PicksSection({ event, comp }: { event: SportEvent; comp: Competition })
               <View style={{ flexDirection: "row", gap: 8 }}>
                 {cs.map((k) => {
                   const o = bestOdds("h2h", (x) => x.competitor_id === k.id);
-                  const sel = myPick("winner")?.selection_competitor_id === k.id;
+                  const sel = cur("winner")?.selection_competitor_id === k.id;
                   return (
-                    <PickButton key={k.id} active={sel} title={competitorName(k, true)} sub={o ? fmtOdds(o.price) : undefined} image={competitorImage(k)}
+                    <PickButton key={k.id} active={sel} saved={isSaved("winner")} title={competitorName(k, true)} sub={o ? fmtOdds(o.price) : undefined} image={competitorImage(k)}
                       onPress={() => place("winner", { selection_competitor_id: k.id, odds_price: o?.price ?? null })} />
                   );
                 })}
@@ -464,8 +484,8 @@ function PicksSection({ event, comp }: { event: SportEvent; comp: Competition })
                 {[a, b].map((k) => {
                   const o = spreadFor(k);
                   if (!o) return null;
-                  const sel = myPick("spread")?.selection_competitor_id === k.id;
-                  return <PickButton key={k.id} active={sel} title={`${competitorName(k, true)} ${fmtLine(o.point)}`} sub={fmtOdds(o.price)}
+                  const sel = cur("spread")?.selection_competitor_id === k.id;
+                  return <PickButton key={k.id} active={sel} saved={isSaved("spread")} title={`${competitorName(k, true)} ${fmtLine(o.point)}`} sub={fmtOdds(o.price)}
                     onPress={() => place("spread", { selection_competitor_id: k.id, line: o.point, odds_price: o.price })} />;
                 })}
               </View>
@@ -478,8 +498,8 @@ function PicksSection({ event, comp }: { event: SportEvent; comp: Competition })
               <View style={{ flexDirection: "row", gap: 8 }}>
                 {(["over", "under"] as const).map((side) => {
                   const o = bestOdds("totals", (x) => x.outcome.toLowerCase() === side);
-                  const sel = myPick("total")?.selection_value === side;
-                  return <PickButton key={side} active={sel} title={side === "over" ? `Más de ${total.point}` : `Menos de ${total.point}`} sub={fmtOdds(o?.price)}
+                  const sel = cur("total")?.selection_value === side;
+                  return <PickButton key={side} active={sel} saved={isSaved("total")} title={side === "over" ? `Más de ${total.point}` : `Menos de ${total.point}`} sub={fmtOdds(o?.price)}
                     onPress={() => place("total", { selection_value: side, line: total.point, odds_price: o?.price ?? null })} />;
                 })}
               </View>
@@ -493,7 +513,7 @@ function PicksSection({ event, comp }: { event: SportEvent; comp: Competition })
                 <View key={k.id} style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
                   <Text style={{ color: colors.textDim, width: 80, fontSize: 12 }} numberOfLines={1}>{competitorName(k, true)}</Text>
                   {(["KO/TKO", "Submission", "Decision"] as const).map((m) => {
-                    const sel = myPick("method")?.selection_competitor_id === k.id && myPick("method")?.selection_value === m;
+                    const sel = cur("method")?.selection_competitor_id === k.id && cur("method")?.selection_value === m;
                     return <Chip key={m} label={m === "Submission" ? "Sumisión" : m === "Decision" ? "Decisión" : m} active={sel}
                       onPress={() => place("method", { selection_competitor_id: k.id, selection_value: m })} />;
                   })}
@@ -508,8 +528,8 @@ function PicksSection({ event, comp }: { event: SportEvent; comp: Competition })
               <Dim>Toca un piloto para elegirlo ganador 🥇; tócalo de nuevo para agregarlo como pick de podio 🏁.</Dim>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 {cs.map((k) => {
-                  const w = myPick("winner")?.selection_competitor_id === k.id;
-                  const p = myPick("podium")?.selection_competitor_id === k.id;
+                  const w = cur("winner")?.selection_competitor_id === k.id;
+                  const p = cur("podium")?.selection_competitor_id === k.id;
                   return (
                     <Pressable key={k.id} onPress={() => place(w ? "podium" : "winner", { selection_competitor_id: k.id })} style={[st.driver, (w || p) && { borderColor: w ? colors.gold : colors.primary }]}>
                       <Avatar uri={k.athletes?.headshot_url} name={k.athletes?.display_name} size={26} />
@@ -523,16 +543,14 @@ function PicksSection({ event, comp }: { event: SportEvent; comp: Competition })
           ) : null}
 
           {mine.length ? (
-            <View style={{ gap: 6 }}>
+            <View style={{ gap: 4 }}>
               {mine.map((p) => (
-                <View key={p.id} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                  <Text style={{ color: colors.primary, fontWeight: "800" }}>✓ {p.pick_type === "winner" ? "Ganador" : p.pick_type} guardado</Text>
-                  <Pressable onPress={() => del.mutate(p.id)}><Text style={{ color: colors.loss, fontWeight: "700" }}>Quitar</Text></Pressable>
-                </View>
+                <Text key={p.id} style={{ color: colors.win, fontWeight: "800" }}>🔒 {p.pick_type === "winner" ? "Ganador" : p.pick_type === "spread" ? "Spread" : p.pick_type === "total" ? "Total" : p.pick_type === "method" ? "Método" : "Podio"} guardado (definitivo)</Text>
               ))}
             </View>
           ) : null}
-          <Dim style={{ fontSize: 11 }}>Los picks se cierran al iniciar ({countdown(comp.starts_at)}). Los de tus amigos se revelan al comenzar.</Dim>
+          {draftCount > 0 ? <Button title={`🔒 Guardar pick${draftCount > 1 ? "s" : ""}`} onPress={saveDrafts} loading={save.isPending} /> : null}
+          <Dim style={{ fontSize: 11 }}>Elige y presiona "Guardar": después ya no se puede cambiar. Se cierran al iniciar ({countdown(comp.starts_at)}); los de tus amigos se revelan al comenzar.</Dim>
         </Card>
       ) : null}
 
@@ -566,12 +584,13 @@ function PicksSection({ event, comp }: { event: SportEvent; comp: Competition })
   );
 }
 
-function PickButton({ title, sub, active, onPress, image }: { title: string; sub?: string; active?: boolean; onPress: () => void; image?: string | null }) {
+function PickButton({ title, sub, active, onPress, image, saved }: { title: string; sub?: string; active?: boolean; onPress: () => void; image?: string | null; saved?: boolean }) {
   return (
-    <Pressable onPress={onPress} style={[st.pickBtn, active && { borderColor: colors.primary, backgroundColor: "rgba(34,211,238,0.12)" }]}>
+    <Pressable onPress={onPress} style={[st.pickBtn, active && { borderColor: saved ? colors.win : colors.primary, backgroundColor: saved ? "rgba(34,197,94,0.12)" : "rgba(34,211,238,0.12)" }, saved && !active && { opacity: 0.45 }]}>
       {image ? <Avatar uri={image} name={title} size={30} /> : null}
       <Text style={{ color: active ? colors.primary : colors.text, fontWeight: "900", textAlign: "center" }} numberOfLines={1}>{title}</Text>
       {sub ? <Text style={{ color: colors.textDim, fontSize: 12, fontWeight: "700" }}>{sub}</Text> : null}
+      {saved && active ? <Text style={{ fontSize: 11 }}>🔒 Guardado</Text> : null}
     </Pressable>
   );
 }

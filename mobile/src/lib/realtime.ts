@@ -54,6 +54,7 @@ export function useGlobalLiveSync(enabled: boolean) {
       refreshTimer = setTimeout(() => {
         refreshTimer = null;
         qc.invalidateQueries({ queryKey: ["my_active_picks"] });
+        qc.invalidateQueries({ queryKey: ["my_picks"] });
         qc.invalidateQueries({ queryKey: ["group_picks"] });
         qc.invalidateQueries({ queryKey: ["leaderboard"] });
         qc.invalidateQueries({ queryKey: ["timeline"] });

@@ -18,6 +18,7 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" options={{ title: "En vivo", tabBarIcon: icon("pulse") }} />
       <Tabs.Screen name="sports" options={{ title: "Deportes", tabBarIcon: icon("trophy") }} />
+      <Tabs.Screen name="picks" options={{ title: "Picks", tabBarIcon: icon("checkmark-done-circle") }} />
       <Tabs.Screen name="groups" options={{ title: "Grupos", tabBarIcon: icon("people") }} />
       <Tabs.Screen name="compare" options={{ title: "Comparar", tabBarIcon: icon("git-compare") }} />
       <Tabs.Screen name="profile" options={{ title: "Perfil", tabBarIcon: icon("person-circle") }} />

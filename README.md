@@ -154,6 +154,10 @@ GitHub → **Settings → Secrets and variables → Actions → New repository s
 
 Revisar que todo jale: SQL Editor → `select job, league_id, ok, items, error from sync_runs order by id desc limit 30;`
 
+### Picks y grupos (uso diario)
+- **Pestaña Picks**: NFL por semana, NBA/MLB por día, UFC/Box por cartelera. Eliges al ganador de cada juego y presionas **🔒 Guardar picks**; desde ese momento son **definitivos** (la base de datos no permite editarlos ni borrarlos).
+- **Grupo → código de invitación**: botones *Copiar código*, *Copiar link* y *Compartir*. El link (`…/group/join?code=XXXX`) abre la versión web y, si el amigo aún no tiene cuenta, recuerda el código y lo une al grupo al registrarse.
+
 ### Cómo la instalan tus amigos
 - **Android**: abren el link del APK en el celular e instalan (permitir "orígenes desconocidos").
 - **iPhone**: abren `https://ricardosalmeron71-png.github.io/sports-picks/` en **Safari** → Compartir → **Agregar a pantalla de inicio**.

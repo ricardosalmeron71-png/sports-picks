@@ -15,7 +15,7 @@ const unwrap = <T>({ data, error }: { data: unknown; error: { message: string } 
 
 // Selección estándar de un evento con todo lo necesario para pintar tarjetas
 export const EVENT_SELECT = `
-  id, league_id, name, short_name, starts_at, status, season_year, week, broadcasts,
+  id, league_id, name, short_name, starts_at, status, season_year, season_type, week, broadcasts,
   venues(id, name, city, state, country, indoor),
   leagues(id, name, short_name, kind, logo_url, color, sort_order),
   competitions(
@@ -337,36 +337,74 @@ export interface PickInput {
   confidence?: number | null;
 }
 
-export function useSavePick() {
+export interface SaveResult {
+  ok: number;
+  failed: { competition_id: string; message: string }[];
+}
+
+/** Los picks son definitivos: solo se insertan (la base de datos no permite editar ni borrar). */
+export function useSavePicks() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (p: PickInput) => {
+    mutationFn: async (picks: PickInput[]): Promise<SaveResult> => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Inicia sesión");
-      const row = { ...p, user_id: user.id };
-      // upsert manual (las columnas de status/puntos no son escribibles por el cliente)
-      const existing = await supabase.from("picks").select("id").eq("group_id", p.group_id).eq("user_id", user.id)
-        .eq("competition_id", p.competition_id).eq("pick_type", p.pick_type).maybeSingle();
-      if (existing.data) {
-        const { group_id: _g, competition_id: _c, pick_type: _t, ...upd } = p;
-        return unwrap(await supabase.from("picks").update(upd).eq("id", existing.data.id).select().single());
+      const result: SaveResult = { ok: 0, failed: [] };
+      for (const p of picks) {
+        const { error } = await supabase.from("picks").insert({ ...p, user_id: user.id });
+        if (!error) result.ok++;
+        else result.failed.push({ competition_id: p.competition_id, message: error.code === "23505" ? "Ya habías guardado este pick." : error.message });
       }
-      return unwrap(await supabase.from("picks").insert(row).select().single());
+      return result;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["event_picks"] });
-      qc.invalidateQueries({ queryKey: ["group_picks"] });
-      qc.invalidateQueries({ queryKey: ["my_active_picks"] });
-      qc.invalidateQueries({ queryKey: ["consensus"] });
+    onSettled: () => {
+      for (const key of ["event_picks", "group_picks", "my_active_picks", "my_picks", "consensus", "leaderboard"]) qc.invalidateQueries({ queryKey: [key] });
     },
   });
 }
 
-export function useDeletePick() {
+/** Mis picks de ganador en un grupo para un conjunto de juegos */
+export function useMyPicks(groupId?: string, userId?: string, competitionIds: string[] = []) {
+  return useQuery({
+    queryKey: ["my_picks", groupId, userId, competitionIds.join(",")],
+    enabled: !!groupId && !!userId && competitionIds.length > 0,
+    queryFn: async () =>
+      unwrap<{ id: string; competition_id: string; selection_competitor_id: string | null; status: string; points: number }[]>(
+        await supabase.from("picks").select("id, competition_id, selection_competitor_id, status, points")
+          .eq("group_id", groupId!).eq("user_id", userId!).eq("pick_type", "winner").in("competition_id", competitionIds),
+      ),
+  });
+}
+
+/** Mejor momio de ganador por competidor (para mostrarlo en los botones de pick) */
+export function useBestMoneylines(competitionIds: string[] = []) {
+  return useQuery({
+    queryKey: ["moneylines", competitionIds.join(",")],
+    enabled: competitionIds.length > 0,
+    queryFn: async () => {
+      const rows = unwrap<{ competitor_id: string | null; price: number }[]>(
+        await supabase.from("odds").select("competitor_id, price").eq("market", "h2h").in("competition_id", competitionIds),
+      );
+      const best = new Map<string, number>();
+      for (const r of rows) if (r.competitor_id && (!best.has(r.competitor_id) || r.price > best.get(r.competitor_id)!)) best.set(r.competitor_id, r.price);
+      return best;
+    },
+  });
+}
+
+export function useCreateGroup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => unwrap(await supabase.from("picks").delete().eq("id", id)),
-    onSuccess: () => qc.invalidateQueries(),
+    mutationFn: createGroup,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["groups"] }),
+  });
+}
+
+export function useJoinGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: joinGroup,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["groups"] }),
   });
 }
 

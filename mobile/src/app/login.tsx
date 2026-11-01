@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, Gradient } from "@/components/ui";
+import { showAlert } from "@/lib/dialog";
 import { supabase } from "@/lib/supabase";
 import { colors, radius } from "@/lib/theme";
 
@@ -14,14 +15,14 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
-    if (!email || password.length < 6) return Alert.alert("Datos incompletos", "Correo y contraseña de al menos 6 caracteres.");
+    if (!email || password.length < 6) return showAlert("Datos incompletos", "Correo y contraseña de al menos 6 caracteres.");
     setBusy(true);
     const { error } = mode === "in"
       ? await supabase.auth.signInWithPassword({ email: email.trim(), password })
       : await supabase.auth.signUp({ email: email.trim(), password, options: { data: { username: username.trim() || undefined, full_name: username.trim() || undefined } } });
     setBusy(false);
-    if (error) Alert.alert("Error", error.message);
-    else if (mode === "up") Alert.alert("¡Listo!", "Cuenta creada. Si tu proyecto exige confirmación, revisa tu correo.");
+    if (error) showAlert("Error", error.message);
+    else if (mode === "up") showAlert("¡Listo!", "Cuenta creada. Si tu proyecto exige confirmación, revisa tu correo.");
   };
 
   return (

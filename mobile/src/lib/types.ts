@@ -125,6 +125,7 @@ export interface SportEvent {
   starts_at: string;
   status: GameStatus;
   season_year: number | null;
+  season_type: number | null;
   week: number | null;
   broadcasts: string[] | null;
   venues?: Venue | null;

@@ -13,11 +13,11 @@
         "EXPO_PUBLIC_SUPABASE_URL": "https://likyehpzkinuouvgkbui.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable__Uynj-ZCwJccCVU1xGIsyQ_8blhljag"
       },
-      "channel": "preview"
+      "channel": "preview",
+      "autoIncrement": true
     },
     "production": {
-      "extends": "preview",
-      "autoIncrement": true
+      "extends": "preview"
     }
   }
 }

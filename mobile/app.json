@@ -61,11 +61,6 @@
     "experiments": {
       "typedRoutes": false,
       "baseUrl": "/sports-picks"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "REEMPLAZA-CON-TU-EAS-PROJECT-ID"
-      }
     }
   }
 }

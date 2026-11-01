@@ -17,3 +17,7 @@ android/
 *.key
 *.mobileprovision
 .DS_Store
+
+# Llaves privadas de Firebase / Google (NUNCA subir al repositorio)
+*-firebase-adminsdk-*.json
+*service-account*.json

@@ -42,12 +42,30 @@ export function useAutoUpdate() {
   return { ready, apply };
 }
 
-/** Texto para mostrar en Perfil: "v1.0.0 · actualización del 1 nov, 5:30 am" */
+/** Texto para mostrar en Perfil: versión, origen y datos técnicos de la actualización */
 export function versionLabel() {
   if (Platform.OS === "web") return "Versión web (siempre actualizada)";
   const base = "v1.0.0";
   if (!Updates.isEnabled) return `${base} · sin actualizaciones por aire`;
-  if (Updates.isEmbeddedLaunch) return `${base} · versión de fábrica`;
-  const d = Updates.createdAt;
-  return d ? `${base} · actualización ${d.toISOString().slice(0, 16).replace("T", " ")} UTC` : base;
+  const rv = (Updates.runtimeVersion ?? "?").slice(0, 8);
+  const origin = Updates.isEmbeddedLaunch ? "versión de fábrica" : `actualización ${(Updates.createdAt ?? new Date(0)).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+  return `${base} · ${origin}\ncompatibilidad ${rv} · canal ${Updates.channel ?? "?"}`;
+}
+
+/** Busca una actualización a mano y explica el resultado (si hay una, la descarga y reinicia la app). */
+export async function checkNow(): Promise<string> {
+  if (Platform.OS === "web") return "La versión web siempre está actualizada.";
+  if (!Updates.isEnabled) return "Esta instalación no tiene actualizaciones por aire activas (¿es un APK anterior?). Instala el APK nuevo.";
+  try {
+    const res = await Updates.checkForUpdateAsync();
+    if (!res.isAvailable) {
+      const reason = "reason" in res ? String((res as { reason?: unknown }).reason) : "";
+      return `Ya tienes la última versión disponible para tu instalación.\n\nCompatibilidad: ${Updates.runtimeVersion}\nCanal: ${Updates.channel}${reason ? `\nMotivo: ${reason}` : ""}`;
+    }
+    await Updates.fetchUpdateAsync();
+    await Updates.reloadAsync();
+    return "Actualización descargada, reiniciando…";
+  } catch (e) {
+    return `No se pudo buscar actualización: ${(e as Error).message}`;
+  }
 }

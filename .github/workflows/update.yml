@@ -1,7 +1,8 @@
 # Actualizaciones "por aire" para el APK de Android (EAS Update).
 # Cada cambio de código en mobile/ se publica solo; la app lo descarga al abrirse (sin reinstalar el APK).
-# Si el cambio toca código nativo (nuevas librerías nativas, Firebase, ícono…), la actualización no llega a APK
-# viejos: hay que correr "Android APK" y reinstalar una vez.
+# La compatibilidad entre APK y actualización la fija mobile/app.json → expo.runtimeVersion (texto fijo).
+# Si un cambio toca código nativo (nuevas librerías nativas, Firebase, ícono, permisos…), hay que CAMBIAR ese
+# texto y correr "Android APK" una vez: así las actualizaciones nuevas no llegan a APK incompatibles.
 # Secret necesario: EXPO_TOKEN (el mismo del APK).
 name: Actualización por aire (Android)
 

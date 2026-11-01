@@ -1,12 +1,13 @@
 // Box: ESPN no publica scoreboard de boxeo, así que usamos TheSportsDB (liga 4445).
-// Secret opcional THESPORTSDB_KEY (la clave "3" es la gratuita de pruebas, con límites).
+// Secret opcional THESPORTSDB_KEY. Sin él se usa la clave pública de prueba "123", que devuelve
+// pocos eventos (próxima/última pelea y parte de la temporada). Con clave premium llega todo.
 import { adminClient, isAuthorizedCron, json, loadLeagues, track } from "../_shared/db.ts";
 import type { GameStatus, NAthlete, NCompetitor, NEvent } from "../_shared/espn.ts";
 import { ingestEvents } from "../_shared/ingest.ts";
 
 // deno-lint-ignore no-explicit-any
 type Any = any;
-const KEY = () => Deno.env.get("THESPORTSDB_KEY") ?? "3";
+const KEY = () => Deno.env.get("THESPORTSDB_KEY") || "123";
 const api = (path: string) => `https://www.thesportsdb.com/api/v1/json/${KEY()}/${path}`;
 const slug = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -44,10 +45,18 @@ function statusOf(e: Any, startsAt: string): GameStatus {
   return Date.parse(startsAt) < Date.now() - 6 * 3600_000 ? "final" : "scheduled";
 }
 
-async function toEvent(e: Any): Promise<NEvent | null> {
+/** "Zuffa Boxing 2 Valenzuela vs Torres" → ["Valenzuela", "Torres"] */
+function fighters(e: Any): [string | undefined, string | undefined] {
+  if (e.strHomeTeam && e.strAwayTeam) return [e.strHomeTeam, e.strAwayTeam];
   const parts = String(e.strEvent ?? "").split(/\s+vs\.?\s+/i);
-  const a: string | undefined = e.strHomeTeam || parts[0];
-  const b: string | undefined = e.strAwayTeam || parts[1];
+  let a = parts[0]?.trim();
+  const b = parts[1]?.replace(/\s*\d+$/, "").trim(); // "Hutchinson 2" (revancha) → "Hutchinson"
+  if (a) a = a.replace(/^.*\b(boxing|card|night|fight|presents?)\b\s*\d*\s+/i, "").trim();
+  return [a || undefined, b || undefined];
+}
+
+async function toEvent(e: Any): Promise<NEvent | null> {
+  const [a, b] = fighters(e);
   if (!a || !b) return null;
   const startsAt = startOf(e);
   const status = statusOf(e, startsAt);
@@ -124,11 +133,16 @@ Deno.serve(async (req) => {
   if (!lg?.thesportsdb_id) return json({ ok: false, error: "liga boxing sin thesportsdb_id" });
 
   const result = await track(db, "sync-boxing", "boxing", async () => {
-    const [next, past] = await Promise.all([
+    const year = new Date().getUTCFullYear();
+    const lists = await Promise.all([
       get(`eventsnextleague.php?id=${lg.thesportsdb_id}`),
       get(`eventspastleague.php?id=${lg.thesportsdb_id}`),
+      get(`eventsseason.php?id=${lg.thesportsdb_id}&s=${year}`),
+      get(`eventsseason.php?id=${lg.thesportsdb_id}&s=${year + 1}`),
     ]);
-    const raw = [...(next?.events ?? []), ...(past?.events ?? [])];
+    const byId = new Map<string, Any>();
+    for (const l of lists) for (const ev of l?.events ?? []) byId.set(String(ev.idEvent), ev);
+    const raw = [...byId.values()];
     const events = (await Promise.all(raw.map(toEvent))).filter((x): x is NEvent => x !== null);
     return await ingestEvents(db, { ...lg, kind: "combat" }, events, { source: "thesportsdb" });
   });

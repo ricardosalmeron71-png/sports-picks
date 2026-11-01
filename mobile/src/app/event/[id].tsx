@@ -248,7 +248,7 @@ function RaceResults({ comp }: { comp: Competition }) {
     <>
       <SectionTitle title={`Clasificación · ${comp.label ?? ""}`} icon="podium" />
       <Card style={{ marginHorizontal: 16, paddingVertical: 6 }}>
-        {rows.slice(0, 20).map((k, i) => (
+        {rows.map((k, i) => (
           <Pressable key={k.id} onPress={() => k.athlete_id && router.push(`/athlete/${k.athlete_id}`)} style={st.raceRow}>
             <Text style={[st.pos, i < 3 && { color: medal[i] }]}>{k.order_index || i + 1}</Text>
             <Avatar uri={k.athletes?.headshot_url} name={k.athletes?.display_name} size={30} />
@@ -504,7 +504,7 @@ function PicksSection({ event, comp }: { event: SportEvent; comp: Competition })
               <Text style={st.pickLabel}>Elige ganador o podio</Text>
               <Dim>Toca un piloto para elegirlo ganador 🥇; tócalo de nuevo para agregarlo como pick de podio 🏁.</Dim>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                {cs.slice(0, 20).map((k) => {
+                {cs.map((k) => {
                   const w = myPick("winner")?.selection_competitor_id === k.id;
                   const p = myPick("podium")?.selection_competitor_id === k.id;
                   return (

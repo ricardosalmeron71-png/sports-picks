@@ -14,6 +14,8 @@ const CHANNEL: Record<string, string> = {
   final: "results",
   pick_result: "results",
   group: "groups",
+  chat: "groups",
+  play: "live",
 };
 
 export async function flushPushQueue(db: DB, maxBatches = 5): Promise<{ sent: number; failed: number; invalidTokens: number }> {
@@ -73,7 +75,7 @@ export async function flushPushQueue(db: DB, maxBatches = 5): Promise<{ sent: nu
               badTokens.push(token);
               continue;
             }
-            const r = await sendWebPush(sub, { title: n.title, body: n.body, tag: `${n.kind}-${n.id}`, data: { ...n.data, notificationId: n.id } }, vapid!);
+            const r = await sendWebPush(sub, { title: n.title, body: n.body, tag: (n.data?.tag as string | undefined) ?? `${n.kind}-${n.id}`, data: { ...n.data, notificationId: n.id } }, vapid!);
             if (r.ok) sent++;
             else {
               failed++;

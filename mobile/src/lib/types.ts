@@ -187,6 +187,8 @@ export interface Profile {
   notify_pick_result: boolean;
   notify_group: boolean;
   notify_favorites: boolean;
+  notify_plays: boolean;
+  notify_chat: boolean;
 }
 
 export interface Group {
@@ -280,4 +282,19 @@ export interface AppNotification {
   data: { route?: string };
   created_at: string;
   read_at: string | null;
+}
+
+export interface GameEvent {
+  id: number;
+  competition_id: string;
+  external_id: string;
+  kind: "touchdown" | "field_goal" | "safety" | "two_point" | "interception" | "fumble";
+  team_id: string | null;
+  description: string | null;
+  period: number | null;
+  clock: string | null;
+  away_score: number | null;
+  home_score: number | null;
+  occurred_at: string | null;
+  teams?: { abbreviation: string | null; logo_url: string | null; display_name: string } | null;
 }

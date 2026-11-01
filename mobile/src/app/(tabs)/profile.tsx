@@ -20,6 +20,8 @@ const OFFSETS = [-480, -420, -360, -300, -240, 0, 60];
 const NOTIFS: { key: keyof Profile; label: string; desc: string }[] = [
   { key: "notify_game_start", label: "Inicio de juego", desc: "Cuando empieza un juego donde tienes pick" },
   { key: "notify_lead_change", label: "Cambio de líder", desc: "En el último cuarto / últimas entradas" },
+  { key: "notify_plays", label: "Jugadas de la NFL", desc: "Touchdowns, goles de campo, safeties, intercepciones y fumbles de tus juegos" },
+  { key: "notify_chat", label: "Mensajes del chat", desc: "Cuando alguien escribe en tus grupos" },
   { key: "notify_pick_result", label: "Resultado de mis picks", desc: "Ganado, perdido o push al terminar" },
   { key: "notify_final", label: "Finales de mis favoritos", desc: "Marcador final de equipos/atletas que sigues" },
   { key: "notify_favorites", label: "Mis favoritos en vivo", desc: "Cuando juegan los que sigues" },

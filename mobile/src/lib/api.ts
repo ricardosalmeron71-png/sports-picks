@@ -2,7 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "./supabase";
 import type {
-  AppNotification, Athlete, AthleteHistoryRow, Competition, Group, LeaderboardRow, League, LeagueId, Odds,
+  AppNotification, Athlete, GameEvent, AthleteHistoryRow, Competition, Group, LeaderboardRow, League, LeagueId, Odds,
   OddsHistory, PickType, Profile, SportEvent, Standing, Team, TeamFormRow, TimelineRow, UserPick,
 } from "./types";
 
@@ -482,6 +482,18 @@ export function useToggleFavorite(userId?: string) {
       return unwrap(await supabase.from("favorites").delete().eq("user_id", userId!).eq(col, id));
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["favorites", userId] }),
+  });
+}
+
+export function useGameEvents(competitionId?: string) {
+  return useQuery({
+    queryKey: ["game_events", competitionId],
+    enabled: !!competitionId,
+    queryFn: async () =>
+      unwrap<GameEvent[]>(
+        await supabase.from("game_events").select("*, teams(abbreviation, logo_url, display_name)").eq("competition_id", competitionId!)
+          .order("occurred_at", { ascending: false, nullsFirst: false }).order("id", { ascending: false }).limit(60),
+      ),
   });
 }
 

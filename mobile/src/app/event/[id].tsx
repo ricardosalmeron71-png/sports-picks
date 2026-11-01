@@ -6,6 +6,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Donut, TrendChart } from "@/components/Charts";
 import { competitorImage, competitorName, mainCompetition } from "@/components/EventCard";
 import { FightStats } from "@/components/FightStats";
+import { PlaysFeed } from "@/components/PlaysFeed";
 import { Avatar, Button, Card, Chip, Dim, Empty, FormDots, LiveBadge, Loading, SectionTitle, StatusPill, TeamLogo } from "@/components/ui";
 import {
   useConsensus, useEvent, useHeadToHead, useMyGroups, useOddsHistory, usePicksForEvent, useSavePicks, useTeamForm,
@@ -43,6 +44,7 @@ export default function EventScreen() {
       {comp ? (
         <>
           {kind === "team" ? <LiveBox comp={comp} /> : null}
+          {kind === "team" && event.league_id === "nfl" && comp.status !== "scheduled" ? <PlaysFeed competitionId={comp.id} away={comp.competitors?.find((k) => k.home_away === "away")?.teams?.abbreviation} home={comp.competitors?.find((k) => k.home_away === "home")?.teams?.abbreviation} /> : null}
           {kind === "racing" ? <RaceResults comp={comp} /> : null}
           <OddsSection comp={comp} />
           <PicksSection event={event} comp={comp} />

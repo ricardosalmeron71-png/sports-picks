@@ -4,6 +4,7 @@
 import { adminClient, isAuthorizedCron, json, loadLeagues, track } from "../_shared/db.ts";
 import { espnDate, fetchFightCenter, fetchScoreboard, type NEvent } from "../_shared/espn.ts";
 import { ingestEvents } from "../_shared/ingest.ts";
+import { syncNflPlays } from "../_shared/plays.ts";
 import { flushPushQueue } from "../_shared/push.ts";
 
 Deno.serve(async (req) => {
@@ -37,7 +38,13 @@ Deno.serve(async (req) => {
         fightDetails = new Map();
         for (const id of events.keys()) for (const [k, v] of await fetchFightCenter(id)) fightDetails.set(k, v);
       }
-      return await ingestEvents(db, lg, [...events.values()], { fightDetails });
+      let n = await ingestEvents(db, lg, [...events.values()], { fightDetails });
+      // NFL: touchdowns, goles de campo, intercepciones… (generan notificaciones por trigger)
+      if (lg.id === "nfl") {
+        const ids = [...events.values()].filter((e) => e.competitions.some((c) => c.status === "live" || c.status === "final")).map((e) => e.external_id);
+        n += await syncNflPlays(db, lg, ids);
+      }
+      return n;
     })
   ));
 

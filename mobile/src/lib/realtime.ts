@@ -76,6 +76,7 @@ export function useGlobalLiveSync(enabled: boolean) {
         applyCompetitor(qc, p.new as Competitor);
         softRefresh();
       })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "game_events" }, () => qc.invalidateQueries({ queryKey: ["game_events"] }))
       .on("postgres_changes", { event: "*", schema: "public", table: "odds" }, (p) => {
         const row = (p.new ?? p.old) as { competition_id?: string };
         if (row?.competition_id) qc.invalidateQueries({ queryKey: ["event"] });

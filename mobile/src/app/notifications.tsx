@@ -14,6 +14,9 @@ const ICON: Record<string, { i: keyof typeof Ionicons.glyphMap; c: string }> = {
   final: { i: "flag", c: colors.textDim },
   pick_result: { i: "checkmark-done", c: colors.win },
   group: { i: "people", c: colors.accent },
+  chat: { i: "chatbubbles", c: colors.primary },
+  play: { i: "american-football", c: colors.win },
+  test: { i: "notifications", c: colors.primary },
 };
 
 export default function Notifications() {

@@ -638,3 +638,70 @@ export async function fetchTeamStats(league: LeagueConf, teamExternalId: string)
   }
   return out;
 }
+
+// ---------------------------------------------------------------------
+// Jugadas clave de la NFL (anotaciones y cambios de balón) para notificaciones
+// ---------------------------------------------------------------------
+export type PlayKind = "touchdown" | "field_goal" | "safety" | "two_point" | "interception" | "fumble";
+
+export interface NPlay {
+  external_id: string;
+  kind: PlayKind;
+  /** equipo beneficiado (anota o recupera el balón), id de ESPN */
+  team_external_id: string | null;
+  description: string;
+  period: number | null;
+  clock: string | null;
+  away_score: number | null;
+  home_score: number | null;
+  occurred_at: string | null;
+}
+
+/** Devuelve el tipo de jugada clave o null si no es relevante. */
+export function classifyPlay(typeText: string, text: string, scoringPlay: boolean): PlayKind | null {
+  const t = typeText.toLowerCase();
+  if (scoringPlay) {
+    if (t.includes("touchdown")) return "touchdown";
+    if (t.includes("field goal")) return "field_goal";
+    if (t.includes("safety")) return "safety";
+    if (t.includes("two point") || t.includes("2-pt") || t.includes("two-point")) return "two_point";
+    return null; // puntos extra (sí se ven en el marcador) no avisan
+  }
+  if (t.includes("interception") || /\bINTERCEPTED\b/.test(text)) return "interception";
+  if (t.includes("fumble recovery (opponent)")) return "fumble";
+  return null;
+}
+
+export async function fetchPlays(league: LeagueConf, eventId: string): Promise<{ competition_external_id: string; plays: NPlay[] } | null> {
+  const d = await getJson(`${SITE}/${league.espn_sport}/${league.espn_league}/summary?event=${eventId}`);
+  if (!d) return null;
+  const competitionId = String(d.header?.competitions?.[0]?.id ?? eventId);
+  const scoringTeam = new Map<string, string>(); // id de jugada → equipo que anotó
+  for (const sp of d.scoringPlays ?? []) if (sp?.id && sp?.team?.id) scoringTeam.set(String(sp.id), String(sp.team.id));
+
+  const drives: Any[] = [...(d.drives?.previous ?? []), ...(d.drives?.current ? [d.drives.current] : [])];
+  const plays: NPlay[] = [];
+  for (const dr of drives) {
+    for (const p of dr.plays ?? []) {
+      const kind = classifyPlay(String(p.type?.text ?? ""), String(p.text ?? ""), !!p.scoringPlay);
+      if (!kind) continue;
+      const id = String(p.id);
+      const parts: Any[] = p.teamParticipants ?? [];
+      const defense = parts.find((x) => x.type === "defense")?.id;
+      const offense = parts.find((x) => x.type === "offense")?.id;
+      const team = scoringTeam.get(id) ?? (kind === "interception" || kind === "fumble" || kind === "safety" ? defense : offense);
+      plays.push({
+        external_id: id,
+        kind,
+        team_external_id: team ? String(team) : null,
+        description: String(p.text ?? "").replace(/\s+/g, " ").trim(),
+        period: int(p.period?.number),
+        clock: p.clock?.displayValue ?? null,
+        away_score: int(p.awayScore),
+        home_score: int(p.homeScore),
+        occurred_at: p.wallclock ? new Date(p.wallclock).toISOString() : null,
+      });
+    }
+  }
+  return { competition_external_id: competitionId, plays };
+}

@@ -372,14 +372,65 @@ export async function fetchRange(league: LeagueConf, from: Date, to: Date): Prom
   return [...out.values()];
 }
 
-/** Detalle UFC (cartelera principal/preliminar, método de victoria, peleas por título). */
-export async function fetchFightCenter(eventId: string) {
+export interface FighterDetail {
+  /** Estadísticas: "c_*" = promedios de carrera (antes de la pelea); el resto = de esta pelea (en vivo / final). */
+  stats: Record<string, string>;
+  bio: { height: string | null; weight: string | null; reach: string | null; stance: string | null; age: number | null; weight_class: string | null };
+  moneyline: number | null;
+}
+
+export interface FightCenterFight {
+  card_segment: string | null;
+  result_method: string | null;
+  result_round: number | null;
+  result_time: string | null;
+  is_title_fight: boolean;
+  match_number: number | null;
+  fighters: Map<string, FighterDetail>;
+}
+
+// Estadísticas de carrera que ESPN muestra antes de la pelea
+const CAREER = /(LPM|Accuracy|Avg|Absorbed|Defense|PerMin)/i;
+
+/** Detalle UFC: cartelera, método, peleas por título, estadísticas de pelea, bio y momios por peleador. */
+export async function fetchFightCenter(eventId: string): Promise<Map<string, FightCenterFight>> {
   const d = await getJson(`${WEB}/mma/ufc/fightcenter/${eventId}`);
-  const out = new Map<string, { card_segment: string | null; result_method: string | null; result_round: number | null; result_time: string | null; is_title_fight: boolean; match_number: number | null }>();
+  const out = new Map<string, FightCenterFight>();
   if (!d?.cards) return out;
   for (const seg of Object.values<Any>(d.cards)) {
     for (const c of seg.competitions ?? []) {
       const st = c.status ?? {};
+      const fighters = new Map<string, FighterDetail>();
+      for (const k of c.competitors ?? []) {
+        const a = k.athlete ?? {};
+        const stats: Record<string, string> = {};
+        for (const x of k.stats ?? []) {
+          if (!x?.name || x.displayValue === undefined || x.displayValue === null) continue;
+          stats[CAREER.test(x.name) ? `c_${x.name}` : x.name] = String(x.displayValue);
+        }
+        let moneyline: number | null = null;
+        for (const o of k.bets?.odds ?? []) {
+          const v = american(o.values?.[0]?.odds);
+          if (v === null) continue;
+          const label = String(o.displayName ?? "");
+          if (/moneyline/i.test(label)) moneyline = v;
+          else if (/ko|tko/i.test(label)) stats.o_ko = String(v);
+          else if (/sub/i.test(label)) stats.o_sub = String(v);
+          else if (/point|decision/i.test(label)) stats.o_dec = String(v);
+        }
+        fighters.set(String(k.id ?? a.id), {
+          stats,
+          moneyline,
+          bio: {
+            height: a.displayHeight ?? null,
+            weight: a.displayWeight ?? null,
+            reach: a.displayReach ?? null,
+            stance: a.stance?.text ?? null,
+            age: int(a.age),
+            weight_class: a.weightClass?.text ?? null,
+          },
+        });
+      }
       out.set(String(c.id), {
         card_segment: seg.cardSegment ?? c.cardSegment?.name ?? null,
         result_method: st.result?.displayName ?? null,
@@ -387,6 +438,7 @@ export async function fetchFightCenter(eventId: string) {
         result_time: st.result ? (st.displayClock ?? null) : null,
         is_title_fight: /title/i.test(c.note ?? "") || /title/i.test(c.type?.text ?? ""),
         match_number: int(c.matchNumber),
+        fighters,
       });
     }
   }

@@ -1,10 +1,11 @@
 // Detalle de evento: marcador en vivo, cartelera/sesiones, momios, picks del grupo, H2H.
 import { Ionicons } from "@expo/vector-icons";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { type ComponentRef, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Donut, TrendChart } from "@/components/Charts";
 import { competitorImage, competitorName, mainCompetition } from "@/components/EventCard";
+import { FightStats } from "@/components/FightStats";
 import { Avatar, Card, Chip, Dim, Empty, FormDots, LiveBadge, Loading, SectionTitle, StatusPill, TeamLogo } from "@/components/ui";
 import {
   useConsensus, useDeletePick, useEvent, useHeadToHead, useMyGroups, useOddsHistory, usePicksForEvent, useSavePick, useTeamForm,
@@ -19,6 +20,7 @@ export default function EventScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: event, isLoading } = useEvent(id);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
 
   const kind = event?.leagues?.kind ?? "team";
   const comp = useMemo(() => {
@@ -29,11 +31,12 @@ export default function EventScreen() {
   if (isLoading || !event) return <Loading />;
 
   return (
-    <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ paddingBottom: 60 }}>
+    <ScrollView ref={scrollRef} style={{ backgroundColor: colors.bg }} contentContainerStyle={{ paddingBottom: 60 }}>
       <Stack.Screen options={{ title: event.leagues?.short_name ?? "" }} />
       <Hero event={event} comp={comp} />
 
-      {kind === "combat" ? <FightCard event={event} selectedId={comp?.id} onSelect={setSelectedId} /> : null}
+      {kind === "combat" && comp ? <FightStats comp={comp} /> : null}
+      {kind === "combat" ? <FightCard event={event} selectedId={comp?.id} onSelect={(id) => { setSelectedId(id); scrollRef.current?.scrollTo({ y: 0, animated: true }); }} /> : null}
       {kind === "racing" ? <Sessions event={event} selectedId={comp?.id} onSelect={setSelectedId} /> : null}
 
       {comp ? (

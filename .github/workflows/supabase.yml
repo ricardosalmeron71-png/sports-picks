@@ -22,6 +22,7 @@ on:
           - desplegar-funciones
           - carga-inicial
           - cargar-historial
+          - estadisticas-ufc
           - aplicar-migraciones
           - probar
 
@@ -87,12 +88,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - name: UFC y F1 (3 años, para historial de peleas y carreras)
+      - name: F1 (3 años, historial de carreras)
         run: |
-          for lg in ufc f1; do
+          curl -sS --max-time 170 -X POST "https://$PROJECT_ID.supabase.co/functions/v1/sync-schedule" \
+            -H "x-cron-secret: $CRON_SECRET" -H "Content-Type: application/json" \
+            -d '{"leagues":["f1"],"daysBack":1100,"daysAhead":0}' || true; echo
+      - name: UFC (3 años por bloques de 2 meses, con estadísticas de cada pelea)
+        run: |
+          for i in $(seq 18 -1 1); do
+            from=$(date -u -d "-$((i*61)) days" +%F); to=$(date -u -d "-$(((i-1)*61)) days" +%F)
+            echo "▶ ufc $from → $to"
             curl -sS --max-time 170 -X POST "https://$PROJECT_ID.supabase.co/functions/v1/sync-schedule" \
               -H "x-cron-secret: $CRON_SECRET" -H "Content-Type: application/json" \
-              -d "{\"leagues\":[\"$lg\"],\"daysBack\":1100,\"daysAhead\":0}" || true; echo
+              -d "{\"leagues\":[\"ufc\"],\"from\":\"$from\",\"to\":\"$to\",\"fightStats\":true}" || true; echo
           done
       - name: NFL, NBA y MLB (último año, por bloques de 2 semanas)
         run: |
@@ -104,6 +112,21 @@ jobs:
                 -H "x-cron-secret: $CRON_SECRET" -H "Content-Type: application/json" \
                 -d "{\"leagues\":[\"$lg\"],\"from\":\"$from\",\"to\":\"$to\"}" || true; echo
             done
+          done
+
+  estadisticas-ufc:
+    if: github.event.inputs.accion == 'estadisticas-ufc'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: UFC (3 años por bloques de 2 meses, con estadísticas de cada pelea)
+        run: |
+          for i in $(seq 18 -1 0); do
+            from=$(date -u -d "-$((i*61)) days" +%F); to=$(date -u -d "-$(((i-1)*61)) days" +%F)
+            echo "▶ ufc $from → $to"
+            curl -sS --max-time 170 -X POST "https://$PROJECT_ID.supabase.co/functions/v1/sync-schedule" \
+              -H "x-cron-secret: $CRON_SECRET" -H "Content-Type: application/json" \
+              -d "{\"leagues\":[\"ufc\"],\"from\":\"$from\",\"to\":\"$to\",\"fightStats\":true}" || true; echo
           done
 
   aplicar-migraciones:

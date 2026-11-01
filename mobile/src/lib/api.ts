@@ -24,7 +24,7 @@ export const EVENT_SELECT = `
     competitors(
       id, competition_id, team_id, athlete_id, home_away, order_index, score, is_winner, record_summary, linescores, stats, leaders,
       teams(id, league_id, name, display_name, abbreviation, logo_url, color, alt_color, record_summary),
-      athletes(id, league_id, display_name, short_name, headshot_url, flag_url, country, record_summary, weight_class)
+      athletes(id, league_id, display_name, short_name, headshot_url, flag_url, country, record_summary, weight_class, height, reach, stance, age)
     )
   )`;
 

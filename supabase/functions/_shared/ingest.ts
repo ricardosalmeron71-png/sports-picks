@@ -8,7 +8,7 @@
 //      y calificación de picks con los marcadores ya guardados.
 // Solo se escriben filas que cambiaron (menos ruido en Realtime).
 // =====================================================================
-import type { LeagueConf, NAthlete, NEvent, NTeam } from "./espn.ts";
+import type { FighterDetail, LeagueConf, NAthlete, NEvent, NTeam } from "./espn.ts";
 import { changedRows, chunk, type DB, uniqBy } from "./db.ts";
 
 type Row = Record<string, unknown>;
@@ -19,6 +19,7 @@ export interface FightDetail {
   result_round: number | null;
   result_time: string | null;
   is_title_fight: boolean;
+  fighters?: Map<string, FighterDetail>;
 }
 
 export interface IngestOptions {
@@ -128,12 +129,22 @@ export async function ingestEvents(db: DB, league: LeagueConf, events: NEvent[],
   const allComps = events.flatMap((e) => e.competitions);
   const allCompetitors = allComps.flatMap((c) => c.competitors);
   const teamMap = await upsertTeams(db, leagueId, allCompetitors.flatMap((c) => (c.team ? [c.team] : [])));
+  // Datos por peleador desde fightcenter (UFC): bio, estadísticas, momios
+  const fighterInfo = new Map<string, FighterDetail>();
+  for (const fd of opts.fightDetails?.values() ?? []) for (const [id, f] of fd.fighters ?? []) fighterInfo.set(id, f);
+
   const athleteMap = await upsertAthletes(
     db,
     leagueId,
-    allCompetitors.flatMap((c) =>
-      c.athlete ? [{ ...c.athlete, ...(league.kind === "combat" && c.record_summary ? { record_summary: c.record_summary } : {}) }] : []
-    ),
+    allCompetitors.flatMap((c) => {
+      if (!c.athlete) return [];
+      const bio = fighterInfo.get(c.athlete.external_id)?.bio;
+      return [{
+        ...c.athlete,
+        ...(league.kind === "combat" && c.record_summary ? { record_summary: c.record_summary } : {}),
+        ...(bio ? { height: bio.height, weight: bio.weight, reach: bio.reach, stance: bio.stance, age: bio.age, weight_class: bio.weight_class } : {}),
+      }];
+    }),
   );
 
   // 3) Eventos
@@ -231,7 +242,7 @@ export async function ingestEvents(db: DB, league: LeagueConf, events: NEvent[],
           is_winner: k.is_winner,
           record_summary: k.record_summary,
           linescores: k.linescores,
-          stats: k.stats,
+          stats: k.athlete && fighterInfo.has(k.athlete.external_id) ? { ...k.stats, ...fighterInfo.get(k.athlete.external_id)!.stats } : k.stats,
           leaders: k.leaders,
         });
       }
@@ -240,6 +251,13 @@ export async function ingestEvents(db: DB, league: LeagueConf, events: NEvent[],
   const exCompetitors = await selectIn(db, "competitors", "id, competition_id, team_id, athlete_id, home_away, order_index, score, is_winner, record_summary, linescores, stats, leaders", "competition_id", [...compMap.values()]);
   const ck = (r: Row) => `${r.competition_id}|${r.team_id ?? r.athlete_id}`;
   const exCmpMap = new Map(exCompetitors.map((r) => [ck(r), r]));
+  // Conservar promedios de carrera ("c_*") y momios por método ("o_*") de antes de la pelea:
+  // durante la pelea ESPN los reemplaza por las estadísticas en vivo.
+  for (const r of competitorRows) {
+    const oldStats = (exCmpMap.get(ck(r))?.stats ?? {}) as Record<string, string>;
+    const keep = Object.fromEntries(Object.entries(oldStats).filter(([k]) => k.startsWith("c_") || k.startsWith("o_")));
+    if (Object.keys(keep).length) r.stats = { ...keep, ...(r.stats as Record<string, string>) };
+  }
   const competitorIds = new Map(exCompetitors.map((r) => [ck(r), String(r.id)]));
   const cmpChanged = changedRows(competitorRows, exCmpMap, ck);
   if (cmpChanged.length) {
@@ -267,8 +285,26 @@ export async function ingestEvents(db: DB, league: LeagueConf, events: NEvent[],
 
   // 7) Momios incrustados (ESPN / DraftKings)
   let oddsCount = 0;
-  if (opts.withOdds) {
+  if (opts.withOdds || opts.fightDetails?.size) {
     const oddsRows: Row[] = [];
+    // Momios de peleas (DraftKings vía fightcenter)
+    for (const e of events) {
+      for (const c of e.competitions) {
+        const competitionId = compMap.get(compKey(c.external_id));
+        if (!competitionId || c.status !== "scheduled") continue;
+        for (const k of c.competitors) {
+          const f = k.athlete ? fighterInfo.get(k.athlete.external_id) : undefined;
+          const aid = k.athlete ? athleteMap.get(k.athlete.external_id) : undefined;
+          if (!f?.moneyline || !aid) continue;
+          oddsRows.push({
+            competition_id: competitionId, bookmaker: "draftkings", market: "h2h",
+            competitor_id: competitorIds.get(`${competitionId}|${aid}`) ?? null,
+            outcome: k.athlete!.display_name, price: f.moneyline, point: null,
+            open_price: null, open_point: null, updated_at: new Date().toISOString(),
+          });
+        }
+      }
+    }
     for (const e of events) {
       for (const c of e.competitions) {
         const competitionId = compMap.get(compKey(c.external_id));

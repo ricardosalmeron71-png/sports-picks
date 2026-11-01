@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Redirect, router, Stack, useGlobalSearchParams, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import { Platform, Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useProfile } from "@/lib/api";
 import { AuthProvider, useAuth } from "@/lib/auth";
@@ -12,6 +12,7 @@ import { useGlobalLiveSync, useNotificationsRealtime } from "@/lib/realtime";
 import { isConfigured } from "@/lib/supabase";
 import { colors } from "@/lib/theme";
 import { setUtcOffset } from "@/lib/time";
+import { useAutoUpdate } from "@/lib/updates";
 import { refreshWebPush } from "@/lib/webpush";
 
 const queryClient = new QueryClient({
@@ -42,6 +43,7 @@ function Gate() {
   useGlobalLiveSync(!!session);
   useNotificationsRealtime(userId);
   useNotificationRouting();
+  const update = useAutoUpdate();
 
   useEffect(() => {
     if (!userId) return;
@@ -59,6 +61,7 @@ function Gate() {
   if (session && inAuth) return <Redirect href="/" />;
 
   return (
+    <View style={{ flex: 1 }}>
     <Stack
       screenOptions={{
         headerStyle: { backgroundColor: colors.bg },
@@ -81,6 +84,12 @@ function Gate() {
       <Stack.Screen name="notifications" options={{ title: "Notificaciones" }} />
       <Stack.Screen name="search" options={{ title: "Buscar", presentation: "modal" }} />
     </Stack>
+      {update.ready ? (
+        <Pressable onPress={update.apply} style={{ position: "absolute", left: 16, right: 16, bottom: 90, backgroundColor: colors.primary, borderRadius: 14, padding: 14, alignItems: "center" }}>
+          <Text style={{ color: colors.bg, fontWeight: "900" }}>✨ Nueva versión lista · toca para actualizar</Text>
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 

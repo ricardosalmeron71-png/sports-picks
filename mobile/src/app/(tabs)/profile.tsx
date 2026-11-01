@@ -12,6 +12,7 @@ import { getNativePushGranted, registerForPush, unregisterPush } from "@/lib/not
 import { supabase } from "@/lib/supabase";
 import { colors, leagueColor } from "@/lib/theme";
 import { fmtPts, offsetLabel, setUtcOffset } from "@/lib/time";
+import { versionLabel } from "@/lib/updates";
 import type { Profile } from "@/lib/types";
 import { disableWebPush, enableWebPush, getWebPushState, type WebPushState } from "@/lib/webpush";
 
@@ -145,6 +146,7 @@ export default function ProfileTab() {
 
         <View style={{ padding: 16, gap: 10 }}>
           <Button title="Ver bandeja de notificaciones" variant="ghost" icon="mail-unread" onPress={() => router.push("/notifications")} />
+          <Text style={{ color: colors.textMuted, fontSize: 11, textAlign: "center" }}>{versionLabel()}</Text>
           <Button title="Cerrar sesión" variant="danger" icon="log-out" onPress={async () => { await unregisterPush(); await supabase.auth.signOut(); }} />
         </View>
       </ScrollView>

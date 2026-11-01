@@ -1,0 +1,47 @@
+# Actualizaciones "por aire" para el APK de Android (EAS Update).
+# Cada cambio de código en mobile/ se publica solo; la app lo descarga al abrirse (sin reinstalar el APK).
+# Si el cambio toca código nativo (nuevas librerías nativas, Firebase, ícono…), la actualización no llega a APK
+# viejos: hay que correr "Android APK" y reinstalar una vez.
+# Secret necesario: EXPO_TOKEN (el mismo del APK).
+name: Actualización por aire (Android)
+
+on:
+  push:
+    branches: [claude/eloquent-davinci-f7oifm, main]
+    paths: ["mobile/**", ".github/workflows/update.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: eas-update
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      EXPO_PUBLIC_SUPABASE_URL: https://likyehpzkinuouvgkbui.supabase.co
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable__Uynj-ZCwJccCVU1xGIsyQ_8blhljag
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Revisar secret
+        run: test -n "${{ secrets.EXPO_TOKEN }}" || { echo "::error::Falta el secret EXPO_TOKEN"; exit 1; }
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - name: Publicar actualización
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          msg=$(printf '%s' "${COMMIT_MESSAGE:-manual}" | head -n 1 | cut -c1-100)
+          eas update --channel preview --platform android --message "$msg" --non-interactive
